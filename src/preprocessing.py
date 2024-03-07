@@ -149,4 +149,46 @@ def party_shares(protocols):
     Returns:
      pd.DataFrame: cleaned data
     '''
-    return protocols
+    # Initialise result list
+    party_data = []
+
+    # Loop over all texts:
+    for index, row in protocols.iterrows():
+        # Initialise result dictionary
+        party_dict = {}
+
+        # Split the data into lines
+        lines = row['main_text'].split('\n')
+
+        # Iterate through the lines to identify speakers and assign utterances to parties
+        current_party = None
+        current_speaker = None
+
+        for line in lines:
+            if line.strip():  # Skip empty lines
+                if '(' in line and ')' in line and ':' in line:
+                    
+                    # Extract party information
+                    party_start = line.index('(') + 1
+                    party_end = line.index(')')
+                    current_party = line[party_start:party_end]
+                    party_dict.setdefault(current_party, [])
+                    
+                    # Extract speaker information
+                    speaker_end = line.index(':')
+                    current_speaker = line[:speaker_end].strip()
+                    
+                elif current_party and current_speaker:
+                    # Assign utterances to the current speaker within the party
+                    party_dict[current_party].append({current_speaker: line.strip()})
+
+        # Write in result df
+        this_id = row['id']
+
+        for party, utterances in party_dict.items():
+            utterances_str = '\n'.join([string for u in utterances for string in u.values()])
+            party_data.append({'id': this_id, 'party': party, 'text': utterances_str})
+
+    new_protocols = pd.DataFrame(party_data)
+
+    return new_protocols
