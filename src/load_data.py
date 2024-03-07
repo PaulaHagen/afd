@@ -69,24 +69,11 @@ def clean_protocols(protocols):
                     isrelevant = True
             if isrelevant:
                 protocols.at[index, 'text_relevant'] = s
+        
+        protocols.at[index, 'text_relevant'] = protocols.at[index, 'text_relevant'].replace('\xa0', ' ') # replace this funky char (see names list)
     
     # zusätzlich bei "Die Sitzung ist geschlossen" oder "(Schluss: )" abschneiden?
     
-    return protocols
-
-
-def party_shares(protocols):
-    '''
-    For a given dataframe of protocols, returns a dataframe with 1 row per protocol and party 
-    -> rows: row_num*5 for 18th period and row_num*6 for 19th period
-    Columns: protocol_id, party, text
-
-    Params: 
-     pd.DataFrame: data
-
-    Returns:
-     pd.DataFrame: cleaned data
-    '''
     return protocols
 
 
