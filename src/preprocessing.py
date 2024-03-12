@@ -1,12 +1,12 @@
 import pandas as pd
 import re
 import bundestag_api
+from src.people import *
 
 
 def identify_interruptions(protocols):
     '''
     For a given dataframe of protocols, returns a dataframe, where the main text is separated from the interruptions.
-    Any utterances from moderating people, that do not speak for any party, are excluded.
     Final Columns: id, main_text, interruptions
 
     Params: 
@@ -19,7 +19,7 @@ def identify_interruptions(protocols):
     new_protocols['main_text'], new_protocols['interruptions'] = '', ''
 
     # Define the parties
-    parties = ['SPD', 'CDU/CSU', 'DIE LINKE', 'BÜNDNIS 90/DIE GRÜNEN', 'AfD', 'FDP']
+    parties = ['SPD', 'CDU/CSU', 'DIE LINKE', 'BÜNDNIS 90/DIE GRÜNEN', 'AfD', 'FDP', 'parteilos']
 
     # Loop over all texts:
     for index, row in new_protocols.iterrows():
@@ -43,39 +43,10 @@ def identify_interruptions(protocols):
     return new_protocols
 
 
-def get_mdb(key = 'rgsaY4U.oZRQKUHdJhF9qguHMkwCGIoLaqEcaHjYLF'):
-    '''
-    Returns a list of relevant politician, who are MdB (of period 18 and 19)
-
-    Returns:
-     list: politicians with full name
-    '''
-    bta = bundestag_api.btaConnection(apikey = key)
-    data = bta.search_person(num = 10000)
-
-    mdb = []
-    try:
-
-        for p in data:
-            if p['wahlperiode'] == 18 or p['wahlperiode'] == 19:
-                mdb.append(p['vorname'] + ' ' + p['nachname'])
-    except: KeyError
-
-    try:     
-        for p in data:  
-            for role in p['person_roles']:
-                if role['funktion'] == 'MdB' and (18 in role['wahlperiode_nummer'] or 19 in role['wahlperiode_nummer']):
-                    mdb.append(role['nachname'] + ' ' + role['nachname'])
-
-    except: KeyError
-
-    return list(set(mdb)) # Turn into set to remove duplicates
-
-
 def remove_president_text(protocols):
     '''
-    For a given dataframe of protocols, returns a dataframe, where all utterances by presidents (-> neutral, no party)
-    from the main text are removed.
+    For a given dataframe of protocols, returns a dataframe, where all utterances by presidents and other neutral or moderating people
+    from the main text are removed. They are saved in a column "neutral_text"
     Columns: id, text, main_text, interruptions, neutral_text
 
     Params: 
@@ -88,16 +59,11 @@ def remove_president_text(protocols):
     new_protocols['neutral_text'] = ''
 
     # Define the parties and persons
-    parties = ['SPD', 'CDU/CSU', 'DIE LINKE', 'BÜNDNIS 90/DIE GRÜNEN', 'AfD', 'FDP']
+    parties = ['SPD', 'CDU/CSU', 'DIE LINKE', 'BÜNDNIS 90/DIE GRÜNEN', 'AfD', 'FDP', 'parteilos']
 
     mdb = get_mdb()
 
-    neutral_persons = ['Präsident Dr. Wolfgang Schäuble:', 'Präsident Dr. Wolfgang Schäuble :', 'Präsident Dr. Wolfgang Schäuble :', 'Präsident Dr. Wolfgang Schäuble:',
-                   'Präsident Dr. Norbert Lammert:', 'Präsident Dr. Norbert Lammert:', 'Präsident Prof. Dr. Norbert Lammert:', 'Präsident Dr. Norbert Lammert :', 'Präsident Dr. Norbert Lammert :',
-                   'Vizepräsidentin Claudia Roth:', 'Vizepräsident Dr. Hans-Peter Friedrich', 'Vizepräsident Dr. Hans-Peter Friedrich', 'Vizepräsident Wolfgang Kubicki',
-                   'Vizepräsident Thomas Oppermann:', 'Vizepräsidentin Petra Pau:', 'Alterspräsident Dr. Hermann Otto Solms:', 'Alterspräsident Dr. Hermann Otto Solms:'
-                   'Vizepräsident Johannes Singhammer:', 'Vizepräsidentin Ulla Schmidt:', 'Vizepräsident Peter Hintze:',
-                   'Vizepräsidentin Edelgard Bulmahn:', 'Alterspräsident Dr. Heinz Riesenhuber:']
+    neutral_persons = get_neutral_persons()
 
     # Loop over all texts:
     for index, row in new_protocols.iterrows():
@@ -137,17 +103,71 @@ def remove_president_text(protocols):
     return new_protocols
 
 
+def clean_gov_persons(protocols):
+    '''
+    For a given dataframe of protocols, returns a dataframe, where all mentionings of government people now follow the same format
+    as the other MdB: "<<full name>> (<<party name>>):"
+    Columns: id, text, main_text, interruptions, neutral_text
+
+    Params: 
+     pd.DataFrame: data
+
+    Returns:
+     pd.DataFrame: data, with modified column main_text
+    '''
+    new_protocols = protocols.copy()
+
+    # Get government persons
+    regierende_original = get_regierende(mdb_format=False, include_party=True)
+    regierende_correct = get_regierende(mdb_format=True, include_party=True)
+
+    for index, row in new_protocols.iterrows():
+        t = str(row['main_text'])
+
+        # Split the data into utterances based on newlines
+        utterances = [line.strip() for line in t.split('\n') if line.strip()]
+
+        # Replace all occurrences of government persons with new format
+        for i in range(len(regierende_original)):
+            person_old = f'{regierende_original[i][0]}:'
+            person_new = regierende_correct[i]
+            utterances = [u.replace(person_old, person_new) for u in utterances]
+
+        # Save new text in main_text column
+        new_protocols.at[index, 'main_text'] = '\n'.join(utterances)
+
+    return new_protocols
+
+
+def clean_and_split_text(protocols):
+    '''
+    For a given dataframe of protocols, returns a "clean" version of that dataframe. Uses the cleaning functions defined above.
+    Columns: id, text, main_text, interruptions, neutral_text
+
+    Params: 
+     pd.DataFrame: data
+
+    Returns:
+     pd.DataFrame: data split into party contributions. Columns: protocol_id, party, text
+    '''
+    clean = identify_interruptions(protocols)
+    clean = remove_president_text(clean)
+    clean = clean_gov_persons(clean)
+
+    return clean
+
+
 def party_shares(protocols):
     '''
     For a given dataframe of protocols, returns a dataframe with 1 row per protocol and party 
-    -> rows: row_num*5 for 18th period and row_num*6 for 19th period
+    -> rows: row_num*5 for 18th period and row_num*6 for 19th period (+ "parteilos")
     Columns: protocol_id, party, text
 
     Params: 
      pd.DataFrame: data
 
     Returns:
-     pd.DataFrame: cleaned data
+     pd.DataFrame: data split into party contributions. Columns: protocol_id, party, text
     '''
     # Initialise result list
     party_data = []
