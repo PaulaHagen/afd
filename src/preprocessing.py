@@ -1,6 +1,7 @@
 import pandas as pd
 import re
 import bundestag_api
+import ast
 from src.people import *
 
 
@@ -27,6 +28,8 @@ def identify_interruptions(protocols):
 
         # Regular expression to identify interruptions (but not when it's just one party in parentheses 
         # -> we need to keep that info to know, who is speaking)
+        # This also tracks the cities in parentheses, e.g., in Claudia Roth (Augsburg) (BÜNDNIS 90/DIE GRÜNEN)
+        # -> so they are not included in main_text later
         interruption_pattern_main = re.compile(r'\((?!(?:' + '|'.join(parties) + ')\\))[^)]+\\)')
 
         # Separate main text and interruptions
@@ -107,6 +110,7 @@ def clean_gov_persons(protocols):
     '''
     For a given dataframe of protocols, returns a dataframe, where all mentionings of government people now follow the same format
     as the other MdB: "<<full name>> (<<party name>>):"
+    Does this for main_text and interruptions
     Columns: id, text, main_text, interruptions, neutral_text
 
     Params: 
@@ -122,19 +126,23 @@ def clean_gov_persons(protocols):
     regierende_correct = get_regierende(mdb_format=True, include_party=True)
 
     for index, row in new_protocols.iterrows():
-        t = str(row['main_text'])
+        t_main = str(row['main_text'])
+        t_inter = str(row['interruptions'])
 
         # Split the data into utterances based on newlines
-        utterances = [line.strip() for line in t.split('\n') if line.strip()]
+        utterances_main = [line.strip() for line in t_main.split('\n') if line.strip()]
+        utterances_inter = [line.strip() for line in t_inter.split('\n') if line.strip()]
 
         # Replace all occurrences of government persons with new format
         for i in range(len(regierende_original)):
             person_old = f'{regierende_original[i][0]}:'
             person_new = regierende_correct[i]
-            utterances = [u.replace(person_old, person_new) for u in utterances]
+            utterances_main = [u.replace(person_old, person_new) for u in utterances_main]
+            utterances_inter = [u.replace(person_old, person_new) for u in utterances_inter]
 
         # Save new text in main_text column
-        new_protocols.at[index, 'main_text'] = '\n'.join(utterances)
+        new_protocols.at[index, 'main_text'] = '\n'.join(utterances_main)
+        new_protocols.at[index, 'interruptions'] = '\n'.join(utterances_inter)
 
     return new_protocols
 
@@ -157,17 +165,17 @@ def clean_and_split_text(protocols):
     return clean
 
 
-def party_shares(protocols):
+def party_shares_main(protocols):
     '''
-    For a given dataframe of protocols, returns a dataframe with 1 row per protocol and party 
+    For a given dataframe of protocols, returns a dataframe with 1 row per protocol and party (for the main text!)
     -> rows: row_num*5 for 18th period and row_num*6 for 19th period (+ "parteilos")
-    Columns: protocol_id, party, text
+    Columns: protocol_id, party, text, text_type (here: main_text)
 
     Params: 
      pd.DataFrame: data
 
     Returns:
-     pd.DataFrame: data split into party contributions. Columns: protocol_id, party, text
+     pd.DataFrame: data split into party contributions. Columns: protocol_id, party, text, text_type
     '''
     # Initialise result list
     party_data = []
@@ -178,7 +186,7 @@ def party_shares(protocols):
         party_dict = {}
 
         # Split the data into lines
-        lines = row['main_text'].split('\n')
+        lines = str(row['main_text']).split('\n')
 
         # Iterate through the lines to identify speakers and assign utterances to parties
         current_party = None
@@ -207,8 +215,119 @@ def party_shares(protocols):
 
         for party, utterances in party_dict.items():
             utterances_str = '\n'.join([string for u in utterances for string in u.values()])
-            party_data.append({'id': this_id, 'party': party, 'text': utterances_str})
+            party_data.append({'id': this_id, 'party': party, 'text': utterances_str, 'text_type': 'main_text'})
 
     new_protocols = pd.DataFrame(party_data)
 
+    return new_protocols
+
+
+def party_shares_inter(protocols):
+    '''
+    For a given dataframe of protocols, returns a dataframe with 1 row per protocol and party (for the interruptions!)
+    -> rows: row_num*5 for 18th period and row_num*6 for 19th period (+ "parteilos")
+    Columns: protocol_id, party, text, 
+
+    Params: 
+     pd.DataFrame: data
+
+    Returns:
+     pd.DataFrame: data split into party contributions. Columns: protocol_id, party, text
+    '''
+    # Initialise result list
+    party_data = []
+
+    # Define the parties
+    parties = ['SPD', 'CDU/CSU', 'DIE LINKE', 'BÜNDNIS 90/DIE GRÜNEN', 'AfD', 'FDP', 'parteilos']
+
+    # Define pattern for detecting text in brackets [ ]
+    pattern = re.compile(r'\[[^\[\]]*\]')
+
+    # Loop over all texts:
+    for index, row in protocols.iterrows():
+        # Initialise result dictionary
+        party_dict = {}
+
+        # Make sure interruptions is not empty
+        if row['interruptions'] != '[]':
+
+            # Turn interruptions list into list data type (is string before)
+            interruptions_list = ast.literal_eval(row['interruptions'])
+            # Turn the interruptions list into the correct string format with new lines, when new speaker or new utterance
+            result_list = []
+            
+            for item in interruptions_list:
+
+                # Remove parentheses around text
+                item = item.replace('(', '')
+                item = item.replace(')', '')
+
+                # Remove city information in parentheses after name (so it isn't read as party name later on)
+                item = pattern.sub(lambda x: x.group(0) if any(word in x.group(0) for word in parties) else '', item)
+
+                # Turn the interruptions list into the correct string format with new lines, when new speaker or new utterance
+                if ':' in item: # filter actual speech (not just applause)
+                    # append new lines, so the format is the same as in the main text
+                    item_list = item.split(': ')
+                    item_string = ':\n'.join(item_list)
+                    item_list = item_string.split(' – ')
+                    item_string = '\n'.join(item_list)
+                    result_list.append(item_string)
+            
+            # Turn list into text
+            interruptions_text = '\n'.join(result_list)
+
+            # Split the data into lines
+            lines = interruptions_text.split('\n')
+
+            # Iterate through the lines to identify speakers and assign utterances to parties
+            current_party = None
+            current_speaker = None
+            
+            for line in lines:
+                if line.strip():  # Skip empty lines
+                    if '[' in line and ']' in line and ':' in line:
+                        
+                        # Extract party information
+                        party_start = line.index('[') + 1
+                        party_end = line.index(']')
+                        current_party = line[party_start:party_end]
+                        party_dict.setdefault(current_party, [])
+                        
+                        # Extract speaker information
+                        speaker_end = line.index(':')
+                        current_speaker = line[:speaker_end].strip()
+                        
+                    elif current_party and current_speaker:
+                        # Assign utterances to the current speaker within the party
+                        party_dict[current_party].append({current_speaker: line.strip()})
+
+                
+            # Write in result df
+            this_id = row['id']
+
+            for party, utterances in party_dict.items():
+                utterances_str = '\n'.join([string for u in utterances for string in u.values()])
+                party_data.append({'id': this_id, 'party': party, 'text': utterances_str, 'text_type': 'interruption'})
+
+    new_protocols = pd.DataFrame(party_data)
+
+    return new_protocols
+    
+
+def party_shares(protocols):
+    '''
+    For a given dataframe of protocols, returns a dataframe with 1 row per protocol and party and text_type (interruptions vs main text) 
+    -> rows: row_num*5 for 18th period and row_num*6 for 19th period (+ "parteilos")
+    Columns: protocol_id, party, text_type, text
+
+    Params: 
+     pd.DataFrame: data
+
+    Returns:
+     pd.DataFrame: data split into party contributions. Columns: protocol_id, party, text, text_type
+    '''
+    party_shares_main_df = party_shares_main(protocols)
+    party_shares_inter_df = party_shares_inter(protocols)
+    new_protocols = pd.concat([party_shares_main_df, party_shares_inter_df])
     return new_protocols
