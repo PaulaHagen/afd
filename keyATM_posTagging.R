@@ -11,10 +11,13 @@ library(magrittr)
 library(stopwords) # Laden des stopwords-Pakets
 library(dplyr) # für eine Filter operation
 library(udpipe)
+library(RColorBrewer)
+library(wordcloud)
+
 
 # Einlesen der Daten 
-textdata <- read.csv("df.csv", sep = ",", encoding = "UTF-8") 
-afd_textdata <- textdata %>% filter(party == "AfD")
+textdata <- read.csv("df_party_shares.csv", sep = ",", encoding = "UTF-8") 
+afd_textdata <- textdata %>% filter(party == "AfD") %>% filter(text_type == "main_text")
 textdata <- afd_textdata
 
 # Erstellung eines Korpus
@@ -23,15 +26,15 @@ bundestag_corpus <- corpus(textdata$text, docnames = textdata$X) # Build a dicti
 udmodel_german <- udpipe::udpipe_download_model(language = "german")
 udmodel_german<- udpipe::udpipe_load_model("german-gsd-ud-2.5-191206.udpipe")
 
-# tokenise, tag, dependency parsing
+# tokenise, tag, dependency parsing --> Takes a while!!
 text_anndf <- udpipe::udpipe_annotate(udmodel_german, x = textdata$text,trace = 50) %>%
   as.data.frame() %>%
   dplyr::select(-sentence)
 
 #saveRDS(text_anndf,file="out/text_anndf.rds")
 
-filtered_text <- text_anndf %>% filter(upos %in% c('NOUN','PROPN', 'ADJ'))
-
+filtered_text_no_names <- text_anndf %>% filter(upos %in% c('NOUN', 'ADJ')) # 'PROPN'
+filtered_text <- text_anndf %>% filter(upos %in% c('NOUN', 'PROPN', 'ADJ'))
 #saveRDS(filtered_text,file="out/filtered_text.rds")
 
 tokens <-  as.tokens(split(filtered_text$lemma, filtered_text$doc_id))
@@ -74,10 +77,10 @@ data_dfm <- corpus_tokens %>%
 # have a look at the number of documents and terms in the matrix
 dim(data_dfm )
 
-# show the most frequent words
+# show the first words
 head(data_dfm, 25)
 
-top10_terms <- c("frau", "mann", "geehrter_herr_präsident_geehrt_dame_herr",
+top10_terms_and_names <- c("frau", "mann", "geehrter_herr_präsident_geehrt_dame_herr",
                  "herr_minister", "frau_ministerin", "frau_präsidentin ", "lieb_kollege",
                  "dame_herr","herr", "herr_präsident_dame_herr",
                  "deutsch_bundestag","merkel", "kanzlerin","frau_merkel",
@@ -94,7 +97,7 @@ top10_terms <- c("frau", "mann", "geehrter_herr_präsident_geehrt_dame_herr",
                  "grundl", "dilcher", "mohr"
                  )
 
-data_dfm <- data_dfm[, !(colnames(data_dfm) %in% top10_terms)]
+data_dfm <- data_dfm[, !(colnames(data_dfm) %in% top10_terms_and_names)]
 # due to vocabulary pruning, we have empty rows in our DTM
 # LDA does not like this. So we remove those docs from the
 # DTM and the metadata
@@ -120,9 +123,9 @@ summary(keyATM_docs)
 
 # PREPARING KEYWORDS
 keywords <- list(
-  Flucht_Migration           = c("illegal", "islam","ausländer", "migration", 
+  Flucht_Migration = c("illegal", "islam","ausländer", "migration", 
                        "afrika", "syrien"),
-  Familie_Gender          = c( "eltern", "geschlecht", "mutter", "gleichberechtigung", "quote"),
+  Familie_Gender   = c( "eltern", "geschlecht", "mutter", "gleichberechtigung", "quote"),
   Klimawandel      = c("energiewende", "klima", "umwelt", "umweltschutz", 
                        "klimawandel", "klimaschutz", "co2"),
   Corona           = c("lockdown","corona", "meinungsfreiheit", "maske", "virus"),
@@ -141,7 +144,7 @@ key_viz
 print(values_fig(key_viz), n = 100)
 #write.table(values_fig(key_viz), file = "out/keywords_big.csv")
 
-# Choosing keywords with an unsupervised topic model
+# Choosing topics with an unsupervised topic model
 set.seed(225)  # set the seed before split the dfm
 docs_withSplit <- keyATM_read(texts = data_dfm,
                               split = 0.3)  # split each document
@@ -163,7 +166,7 @@ out <- keyATM(
 )
 top_words(out)
 
-# KEY ATM BASE
+# KEY ATM BASE WITH KEYWORDS
 out <- keyATM(
   docs              = keyATM_docs,    # text input
   no_keyword_topics = 5,              # number of topics without keywords
@@ -172,12 +175,14 @@ out <- keyATM(
   options           = list(seed = 250)
 )
 top_words(out)
+#write.table(top_words(out), file = "out/top_words_topics.csv")
 
 #save(out, file = "out/firstmodel.rds")
 #out <- readRDS(file = "firstmodel.rds")
 
-plot_topicprop(out, n=5, show_topic = 1:5)
+plot_topicprop(out, n=6, show_topic = 1:10)
 top_docs(out) 
+plot_modelfit(out)
 
 
 
