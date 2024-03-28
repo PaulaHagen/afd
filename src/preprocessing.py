@@ -329,5 +329,5 @@ def party_shares(protocols):
     '''
     party_shares_main_df = party_shares_main(protocols)
     party_shares_inter_df = party_shares_inter(protocols)
-    new_protocols = pd.concat([party_shares_main_df, party_shares_inter_df])
+    new_protocols = pd.concat([party_shares_main_df, party_shares_inter_df], ignore_index=True)
     return new_protocols
