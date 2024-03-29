@@ -2,7 +2,9 @@ import pandas as pd
 import re
 import bundestag_api
 import ast
+import datetime
 from src.people import *
+from src.load_data import get_metadata
 
 
 def identify_interruptions(protocols):
@@ -331,3 +333,26 @@ def party_shares(protocols):
     party_shares_inter_df = party_shares_inter(protocols)
     new_protocols = pd.concat([party_shares_main_df, party_shares_inter_df], ignore_index=True)
     return new_protocols
+
+
+def add_metadata(df_text_of_parties):
+    '''
+    For a given dataframe with 1 row per protocol and party and text_type (interruptions vs main text) 
+    adds metadata date and wahlperiode
+    Columns: protocol_id, party, text_type, text, date, wahlperiode
+
+    Params: 
+     pd.DataFrame: data
+
+    Returns:
+     pd.DataFrame: data split into party contributions. Columns: protocol_id, party, text, text_type, date, wahlperiode
+    '''
+    metadata = get_metadata()
+    
+    for md in metadata:
+        for index, row in df_text_of_parties.iterrows():
+            if int(md['id']) == row['id']:
+                df_text_of_parties.at[index, 'wahlperiode'] = int(md['wahlperiode'])
+                df_text_of_parties.at[index, 'datum'] = datetime.datetime.strptime(md['datum'],'%Y-%m-%d')
+
+    return df_text_of_parties

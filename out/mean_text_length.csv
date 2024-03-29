@@ -1,13 +1,13 @@
-party;text_type;text_length
-AfD;interruption;3444,901288
-AfD;main_text;57080,66525
-B†NDNIS 90/DIE GR†NEN;interruption;3874,709205
-B†NDNIS 90/DIE GR†NEN;main_text;57242,80376
-CDU/CSU;interruption;2676,384134
-CDU/CSU;main_text;163445,7505
-DIE LINKE;interruption;2269,534737
-DIE LINKE;main_text;50638,35073
-FDP;interruption;2408,692308
-FDP;main_text;48171,39241
-SPD;interruption;1813,328358
-SPD;main_text;106301,7505
+party,text_type,text_length
+AfD,interruption,3444.901287553648
+AfD,main_text,57080.66525423729
+BÃœNDNIS 90/DIE GRÃœNEN,interruption,3874.7092050209203
+BÃœNDNIS 90/DIE GRÃœNEN,main_text,57242.80375782881
+CDU/CSU,interruption,2676.384133611691
+CDU/CSU,main_text,163445.75051975052
+DIE LINKE,interruption,2269.5347368421053
+DIE LINKE,main_text,50638.35073068894
+FDP,interruption,2408.6923076923076
+FDP,main_text,48171.39240506329
+SPD,interruption,1813.3283582089553
+SPD,main_text,106301.75051975052

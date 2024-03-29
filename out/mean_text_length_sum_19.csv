@@ -1,0 +1,13 @@
+party,text_type,text_length
+AfD,interruption,802662
+AfD,main_text,13471037
+BÜNDNIS 90/DIE GRÜNEN,interruption,741486
+BÜNDNIS 90/DIE GRÜNEN,main_text,11623308
+CDU/CSU,interruption,632650
+CDU/CSU,main_text,37764347
+DIE LINKE,interruption,548327
+DIE LINKE,main_text,10161503
+FDP,interruption,563634
+FDP,main_text,11381803
+SPD,interruption,495814
+SPD,main_text,23665643
