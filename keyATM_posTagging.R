@@ -13,6 +13,7 @@ library(dplyr) # für eine Filter operation
 library(udpipe)
 library(RColorBrewer)
 library(wordcloud)
+library(report)
 
 
 # Einlesen der Daten 
@@ -183,7 +184,7 @@ top_words(out)
 plot_topicprop(out, n=6, show_topic = 1:10)
 top_docs(out) 
 plot_modelfit(out)
-
+#save_fig(plot_modelfit(out), "out/base_modelfit.png", width = 7, height = 5)
 
 
 ############################
